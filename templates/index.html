@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Daily Routine Tracker{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+    <header class="dashboard-header">
+        <div class="header-left">
+            <h1>Daily Dashboard</h1>
+            <p id="date-display"></p>
+        </div>
+        <div class="user-profile">
+            <div class="avatar">S</div>
+            <span>Sriya</span>
+        </div>
+    </header>
+    
+<form id="routine-form" method="POST" action="/">
+
+        <ul class="task-list">
+            {% for task in tasks %}
+            <li>
+                <label>
+                    <input type="checkbox" name="{{ task }}" value="1" {{ 'checked' if task_status[task] else '' }}>
+                    {{ task }}
+                </label>
+            </li>
+            {% endfor %}
+        </ul>
+        <button type="submit" class="update-btn">Update Progress</button>
+    </form>
+    
+    <div class="stats-section">
+        <div id="status"></div>
+    </div>
+    
+    <div class="manage-section">
+        <a href="/manage" class="btn-primary manage-btn">Manage Tasks</a>
+    </div>
+</div>
+
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const today = new Date().toLocaleDateString('en-US', { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+    });
+    document.getElementById('date-display').textContent = today;
+});
+</script>
+{% endblock %}

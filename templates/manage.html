@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Tasks - Daily Routine Tracker{% endblock %}
+
+{% block content %}
+<div class="manage-container">
+  <header class="dashboard-header">
+    <div class="header-left">
+      <h1>Manage Tasks</h1>
+      <p>Edit your daily routine list</p>
+    </div>
+    <a href="/" class="btn-primary">Back to Dashboard</a>
+  </header>
+
+  <form method="POST" action="/manage" class="manage-form">
+    <h3>Current Tasks ({{ tasks|length }})</h3>
+    <div class="task-manager">
+      {% for task in tasks %}
+      <div class="task-item">
+        <span class="task-name">{{ task }}</span>
+        <button type="submit" name="delete_task" value="{{ task }}" class="btn-danger">Delete</button>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="add-task-section">
+      <h3>Add New Task</h3>
+      <div class="input-row">
+        <input type="text" name="new_task" placeholder="Enter new task name...">
+        <button type="submit" name="add" value="1" class="btn-primary">Add Task</button>
+      </div>
+    </div>
+    
+    <div style="text-align: center; margin-top: 2rem;">
+      <a href="/" class="btn-primary">Back to Dashboard</a>
+    </div>
+  </form>
+
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}
+      {% for message in messages %}
+        <div class="alert alert-success">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+</div>
+{% endblock %}
+
