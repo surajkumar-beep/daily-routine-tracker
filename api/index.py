@@ -2,7 +2,10 @@ import os
 from flask import Flask, render_template, request, redirect, url_for, flash
 import sys
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/..')
+import sys
+sys.path.insert(0, '..')
 from app import app as flask_app
+
 
 app = Flask(__name__)
 app.secret_key = flask_app.secret_key
