@@ -1,159 +1,126 @@
 from flask import Flask, render_template, request, redirect, url_for, flash
-import sqlite3
+import csv
 import json
 import os
 from datetime import datetime, date
+import pandas as pd
 
 app = Flask(__name__)
-app.secret_key = "daily_routine_secret"
+app.secret_key = 'daily_routine_secret'
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-TASKS_PATH = os.path.join(BASE_DIR, "tasks.json")
-DB_PATH = os.path.join(BASE_DIR, "routine.db")
+CSV_PATH = os.path.join(BASE_DIR, 'routine.csv')
+TASKS_PATH = os.path.join(BASE_DIR, 'tasks.json')
 
-
-# ---------------- DATABASE ---------------- #
-
-def init_db():
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS routine (
-        date TEXT PRIMARY KEY,
-        data TEXT
-    )
-    """)
-
-    conn.commit()
-    conn.close()
-
-
-# ---------------- TASKS ---------------- #
-
+# Load tasks from JSON
 def load_tasks():
     if os.path.exists(TASKS_PATH):
-        with open(TASKS_PATH, "r") as f:
+        with open(TASKS_PATH, 'r') as f:
             return json.load(f)
     return []
 
+# Get or create CSV header
+def ensure_csv_header():
+    if not os.path.exists(CSV_PATH):
+        tasks = load_tasks()
+        header = ['date'] + tasks
+        with open(CSV_PATH, 'w', newline='', encoding='utf-8-sig') as f:
+            writer = csv.writer(f)
+            writer.writerow(header)
 
-def save_tasks(tasks):
-    with open(TASKS_PATH, "w") as f:
-        json.dump(tasks, f, indent=2)
+# Load CSV data as DataFrame for easy manipulation
+def load_csv_data():
+    ensure_csv_header()
+    df = pd.read_csv(CSV_PATH)
+    return df
 
+# Save DataFrame to CSV
+def save_csv_data(df):
+    df.to_csv(CSV_PATH, index=False, encoding='utf-8-sig')
 
-# ---------------- ROUTINE DATA ---------------- #
-
+# Get today's row status
 def get_today_status():
     today = date.today().isoformat()
-
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT data FROM routine WHERE date=?", (today,))
-    row = cursor.fetchone()
-
-    conn.close()
-
-    if row:
-        return json.loads(row[0])
+    df = load_csv_data()
+    
+    if today in df['date'].values:
+        row = df[df['date'] == today].iloc[0]
+        status = dict(row)
+        del status['date']
+        return {k: v == '✔' for k, v in status.items()}
+    
     return {}
 
-
+# Update today's progress
 def update_today_progress(form_data):
     today = date.today().isoformat()
+    df = load_csv_data()
     tasks = load_tasks()
-
-    status = {}
-
+    
+    status_row = {'date': today}
     for task in tasks:
-        status[task] = "✔" if form_data.get(task) else ""
-
-    # auto mark X at 11:59
+        status_row[task] = '✔' if form_data.get(task) else ''
+    
+    # Check if today exists
+    if today in df['date'].values:
+        # Update existing row
+        idx = df[df['date'] == today].index[0]
+        df.iloc[idx] = pd.Series(status_row)
+    else:
+        # Append new row
+        new_row = pd.DataFrame([status_row])
+        df = pd.concat([df, new_row], ignore_index=True)
+    
+    # Auto-mark missed tasks at end of day (23:59)
     now = datetime.now()
     if now.hour == 23 and now.minute == 59:
         for task in tasks:
-            if status[task] == "":
-                status[task] = "X"
+            if df.iloc[-1][task] == '':
+                df.iloc[-1][task] = 'X'
+    
+    save_csv_data(df)
 
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-
-    cursor.execute(
-        "INSERT OR REPLACE INTO routine (date, data) VALUES (?, ?)",
-        (today, json.dumps(status, ensure_ascii=False))
-    )
-
-    conn.commit()
-    conn.close()
-
-
-# ---------------- SPECIAL DAY ---------------- #
-
+# Check if special day for Curd Rice
 def is_curd_rice_day():
-    today = date.today().strftime("%A")
-    return today in ["Tuesday", "Thursday", "Saturday"]
+    today = date.today().strftime('%A')
+    return today in ['Tuesday', 'Thursday', 'Saturday']
 
-
-# ---------------- ROUTES ---------------- #
-
-@app.route("/", methods=["GET", "POST"])
+@app.route('/', methods=['GET', 'POST'])
 def index():
-
     tasks = load_tasks()
-
     if is_curd_rice_day():
-        tasks = tasks + ["Curd Rice"]
-
+        tasks = tasks + ['Curd Rice']
+    
     task_status = get_today_status()
-
-    if request.method == "POST":
+    if request.method == 'POST':
         update_today_progress(request.form)
-        flash("Progress updated successfully!", "success")
-        return redirect(url_for("index"))
+        flash('Progress updated successfully!', 'success')
+        return redirect(url_for('index'))
+    
+    return render_template('index.html', tasks=tasks, task_status=task_status)
 
-    return render_template(
-        "index.html",
-        tasks=tasks,
-        task_status=task_status
-    )
-
-
-@app.route("/manage", methods=["GET", "POST"])
+@app.route('/manage', methods=['GET', 'POST'])
 def manage():
-
     tasks = load_tasks()
-
-    if request.method == "POST":
-
-        # ADD TASK
-        if request.form.get("add"):
-            new_task = request.form.get("new_task", "").strip()
-
+    if request.method == 'POST':
+        if request.form.get('add'):
+            new_task = request.form.get('new_task', '').strip()
             if new_task and new_task not in tasks:
                 tasks.append(new_task)
-                save_tasks(tasks)
-                flash(f'Added "{new_task}"', "success")
-
-            return redirect(url_for("manage"))
-
-        # DELETE TASK
-        delete_task = request.form.get("delete_task")
-
+                with open(TASKS_PATH, 'w') as f:
+                    json.dump(tasks, f, indent=2)
+                flash(f'Added "{new_task}"', 'success')
+            return redirect(url_for('manage'))
+        delete_task = request.form.get('delete_task')
         if delete_task in tasks:
             tasks.remove(delete_task)
-            save_tasks(tasks)
-            flash(f'Deleted "{delete_task}"', "success")
+            with open(TASKS_PATH, 'w') as f:
+                json.dump(tasks, f, indent=2)
+            flash(f'Deleted "{delete_task}"', 'success')
+        return redirect(url_for('manage'))
+    return render_template('manage.html', tasks=tasks)
 
-        return redirect(url_for("manage"))
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=True)
 
-    return render_template("manage.html", tasks=tasks)
-
-
-# ---------------- START SERVER ---------------- #
-
-if __name__ == "__main__":
-    init_db()
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
