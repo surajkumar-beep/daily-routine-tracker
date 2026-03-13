@@ -82,7 +82,7 @@ def update_today_progress(form_data):
 
     cursor.execute(
         "INSERT OR REPLACE INTO routine (date, data) VALUES (?, ?)",
-        (today, json.dumps(status))
+        (today, json.dumps(status, ensure_ascii=False))
     )
 
     conn.commit()
@@ -154,9 +154,6 @@ def manage():
 # ---------------- START SERVER ---------------- #
 
 if __name__ == "__main__":
-
     init_db()
-
     port = int(os.environ.get("PORT", 10000))
-
     app.run(host="0.0.0.0", port=port)
